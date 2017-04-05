@@ -37,9 +37,9 @@ class leFtp {
 		// ------ E N D: Create RegExp for filtering out file extensions
 
 		this.Ftp = new ftp();
-		this.Ftp.on('greeting',msg=>{console.log(msg);});
-		this.Ftp.on('ready',()=>{console.log(`Connected`);});
-		this.Ftp.on('error',err=>{console.log(err);});
+		this.Ftp.on('greeting',msg=>{console.log("FTP server found.");});
+		this.Ftp.on('ready',()=>{console.log(`Connected to FTP server.`);});
+		this.Ftp.on('error',err=>{console.log(err.code);throw err;});
 		this.Ftp.connect({
 			host	: config.host,
 			port	: config.port,
@@ -109,15 +109,12 @@ class leFtp {
 		var remoteDirPath = this.remoteRoot + (this.remoteRoot==''?'':'/') + localDirRelative;
 		var remoteFileNameFull = this.remoteRoot + (this.remoteRoot==''?'':'/') + fileName;
 		//console.log(`Upload: ${remoteDirPath}   --  ${fileNameOnly}`);
-		console.log(`Upload: ${localFileNameFull}   -->  ${remoteFileNameFull}`);
+		//console.log(`Upload: ${localFileNameFull}   -->  ${remoteFileNameFull}`);
 		this.Ftp.put(localFileNameFull,remoteFileNameFull,err=>{
 			if ( err ) {
-				console.log("p: Error code for " + localFileNameFull + " => " + remoteFileNameFull + " is " + err.code);
-				console.log(err);
-				console.log("\n");
 				if ( err.code == 553 ) {
 					// Destination folder may not exist. Create and retry
-					console.log("Will create " + remoteDirPath + " and retry");
+					console.log("Will create directory " + remoteDirPath);
 
 					this.Ftp.mkdir(remoteDirPath,true,err2=>{
 						if ( err2 ) throw err2;
@@ -127,15 +124,16 @@ class leFtp {
 							else console.log(`Uploaded ${fileName}`);
 						});
 					});
-				}
+				} else throw err; // Some error, other than "destination directory does not exist"
 			} else console.log(`Uploaded ${fileName}`);
 		});
 	}
 	deleteFile(fileName) {
 		var remoteFileNameFull = this.remoteRoot + (this.remoteRoot==''?'':'/') + fileName;
-		console.log(`Will delete ${remoteFileNameFull}`);
+		//console.log(`Will delete ${remoteFileNameFull}`);
 		this.Ftp.delete(remoteFileNameFull, err=>{
 			if ( err ) console.log(`Cannot delete from remote file ${remoteFileNameFull}`);
+			else console.log(`Deleted remote file ${remoteFileNameFull}`);
 		});
 	}
 }

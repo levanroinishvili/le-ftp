@@ -1,7 +1,15 @@
 # le-ftp
-Watches local directory (and its sub-directories) for changes and uploads changed files via ftp - node.js
+###Watch local directory (and its sub-directories) for changes and uploads changed files via ftp - node.js
 
 This is not fully tested and should not be used in any critical applications.
+
+## ***Important***
+- On some networks the node.js ftp module cannot connect and returns ECONNREFUSED error
+- This could be resolved by editing file `node_modules/ftp/lib/connections.js`
+- Open the file and go to line 106, which says
+  - `socket.setKeepAlive(true);`
+- Change `true` to `false`, so that it now says
+  - `socket.setKeepAlive(false);`
 
 ### Usage
 1. Make sure you have `node.js` installed
