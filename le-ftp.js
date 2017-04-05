@@ -1,124 +1,143 @@
-var ftpConfig = {
-	host: '',
-	port: 21,
-	remoteRootDir: '',
-	localRootDir: '',
-	user: '',
-	password: '',
-	ext: ['.css','.js','.html','txt'],
-	timeoutSeconds: 3
-};
+var fs	= require('fs');
+var ftp	= require('ftp');
 
-var fs = require('fs');
-var ftpClient = require('ftp');
-
-class wfile {
-	constructor(name,lastMod) {
+class sFile {
+	constructor(name,modTime) {
 		this.name = name;
-		this.lastMod = lastMod;
+		this.modTime = modTime;
 	}
 }
 
-// Remove trailing '/' from remoteRoodDir
-while (ftpConfig.remoteRootDir.substr(-1,1)=='/')
-	ftpConfig.remoteRootDir = ftpConfig.remoteRootDir.substr(0,ftpConfig.remoteRootDir.length-1);
+class leFtp {
+	constructor(config) {
+		this.localRoot	= config.localRootDir.replace(/\\/g,'/') ;
+		this.remoteRoot	= config.remoteRootDir;//(config.remoteRootDir.startsWith('/')?'':'/') + config.remoteRootDir ;
+		this.frequency	= 1000*config.frequency;
 
-// Create RegExp for filtering out file extensions
-ext = ftpConfig.ext;
-var c1;
-if (typeof ext == 'undefined' ) {
-	extRegEx = '.*';
-} else if ( typeof ext == 'string' ) {
-	while ( (c1=ext.substr(0,1)||true) && (c1=='.' || c1==' ') ) ext=ext.substr(1);
-	if ( ext == '' ) extRegEx = ext.concat('.*');
-	else extRegEx = '\\.' . concat(ext,'$');
-} else if ( Array.isArray(ext) ) {
-	extRegEx = ext.reduce(function(regex,e){
-		while ( (c1=e.substr(0,1)||true) && (c1=='.' || c1==' ') ) e=e.substr(1);
-		if ( regex=='' ) return e;
-		else return regex.concat('|',e);
-	});
-	while ( (c1=extRegEx.substr(0,1)||true) && (c1=='.' || c1==' ') ) extRegEx=extRegEx.substr(1);
-	extRegEx = '\\.('.concat(extRegEx,')$');
-} else extRegEx = '.*';
-extRegEx = new RegExp(extRegEx,'i');
+		this.allFiles = [];
 
-function dirfiles(path='') {
-	var fullPath = ftpConfig.localRootDir + ((ftpConfig.localRootDir=='' || path=='')?'':'/') + path;
-	var dfiles = [];
+		// ------ BEGIN: Create RegExp for filtering out file extensions
+		let ext = config.ext;
+		var c1,extRegEx;
+		if (typeof ext == 'undefined' ) {
+			extRegEx = '';
+		} else if ( typeof ext == 'string' ) {
+			while ( (c1=ext.substr(0,1)||true) && (c1=='.' || c1==' ') ) ext=ext.substr(1);
+			if ( ext == '' ) extRegEx = '';
+			else extRegEx = '\\.' . concat(ext,'$');
+		} else if ( Array.isArray(ext) ) {
+			extRegEx = ext.reduce(function(regex,e){
+				while ( (c1=e.substr(0,1)||true) && (c1=='.' || c1==' ') ) e=e.substr(1);
+				if ( regex!='' && e!='') return regex.concat('|',e);
+				else return regex.concat(e);
+			},'');
+			if (extRegEx!='') extRegEx = '\\.('.concat(extRegEx,')$');
+		} else extRegEx = '';
+		this.extRegEx = new RegExp(extRegEx,'i');
+		// ------ E N D: Create RegExp for filtering out file extensions
 
-	try{
-		files = fs.readdirSync(fullPath);
-	} catch(err) {
-		console.log("Cannot read path: " + fullPath);
-		return [];
+		this.Ftp = new ftp();
+		this.Ftp.on('greeting',msg=>{console.log(msg);});
+		this.Ftp.on('ready',()=>{console.log(`Connected`);});
+		this.Ftp.on('error',err=>{console.log(err);});
+		this.Ftp.connect({
+			host	: config.host,
+			port	: config.port,
+			user	: config.user,
+			password: config.password,
+			secure	: false,
+		});
+
+		this.compareFiles();
+
+
 	}
- 
-    files.forEach(function(file){
-    	var filepath = path + (path==''?'':'/') + file;
-    	var filepathfull = ftpConfig.localRootDir + ((ftpConfig.localRootDir=='' || filepath=='')?'':'/') + filepath;
-    	var stat = fs.statSync(filepathfull);
-     	if (stat.isFile() && extRegEx.test(file) ) {
-    		dfiles.push( new wfile(filepath,stat['mtime'].getTime()) );
-    	} else if (stat.isDirectory() ) {
-			dfiles = dfiles.concat(dirfiles(filepath));
-    	}
-    });
 
-	return dfiles;
-}
-
-var ftpLink = new ftpClient();
-ftpLink.on('error',err=>{
-	console.log(err);
-	console.log("Re-connecting");
-	ftpLink.connect(ftpConfig);
-});
-ftpLink.connect(ftpConfig);
-
-var allFiles = [];
-compareFileState();
-
-function compareFileState() {
-	var newFiles = dirfiles();
-	newFiles.forEach(f=>{
-		var isNewFile = true;
-		for (var i=0; i<allFiles.length; i++) {
-			if (allFiles[i].name==f.name) {
-				isNewFile = false;
-				if (allFiles[i].lastMod<f.lastMod) uploadFile(f.name);
-				allFiles.splice(i,1);
-				break;
-			}
-		}
-		if ( isNewFile ) uploadFile(f.name);
-	});
-	allFiles.forEach(f=>{removeRemoteFile(f.name);});
-
-	allFiles = newFiles;
-
-	setTimeout(compareFileState,1000*ftpConfig.timeoutSeconds);
-}
-
-function uploadFile(filename) {
-	var fullfilename = ftpConfig.localRootDir + (ftpConfig.localRootDir==''?'':'/') + filename ;
-	console.log("Will upload ["+filename+"] to [" + (ftpConfig.remoteRootDir + '/' + filename).replace(/\s/g,'_') + "]");
-	var dirFileBoundary = filename.lastIndexOf('/');
-	var d = filename.substr(0,dirFileBoundary);
-	var f = filename.substr(dirFileBoundary+1);
-	d = ftpConfig.remoteRootDir + '/' + d;
-	ftpLink.lastMod(d,(err,date)=>{
-		if ( err ) {
-			ftpLink.mkdir(d.replace(/\s/g,'_'),true,err2=>{
-				if ( err2 ) console.log(err2);
-				else ftpLink.put(fullfilename, (ftpConfig.remoteRootDir + '/' + filename).replace(/\s/g,'_') , err=>{if(err) console.log(err); else console.log("Uploaded " + filename); });
+	getSnapshot() {
+		const walk = (path='' , structure=[]) => {
+			return new Promise((resolve,reject)=>{
+				let dirFullPath = this.localRoot.concat( (this.localRoot.endsWith('/')||path==''?'':'/'),path);
+				fs.readdir(dirFullPath, (err,files)=>{
+					if (err) console.log(`Error reading directory: ${dirFullPath}`);
+					else {
+						let fileToProcess = files.length;
+						files.forEach(f=>{
+							const filefullpath	= `${dirFullPath}${dirFullPath.endsWith('/')?'':'/'}${f}` ;
+							const fileRelPath	= `${path}${path==''?'':'/'}${f}` ;
+							fs.stat(filefullpath,(err,fstats)=>{
+								if ( err ) console.log(`${filefullpath} : Error ${err.code}`);
+								else if (fstats.isDirectory() ) walk(fileRelPath,structure).then(ignore=>{if (!--fileToProcess) resolve(structure); });
+								else if (fstats.isFile() ) { if (this.extRegEx.test(f)) structure.push(new sFile(fileRelPath,fstats.mtime.getTime())); if (!--fileToProcess) resolve(structure); }
+							});
+						});
+					}
+				});
 			});
-		} else ftpLink.put(fullfilename, (ftpConfig.remoteRootDir + '/' + filename).replace(/\s/g,'_') , err=>{if(err) console.log(err); else console.log("Uploaded " + filename); });
-	});
+		};
+
+		return new Promise( (resolve,reject)=>{
+			walk()
+				.then(str=>{resolve(str)})
+				.catch(err => { reject(err); });
+		});
+	}
+
+	compareFiles() {
+		this.getSnapshot()
+			.then((str)=>{
+				str.forEach(f=>{
+					let i = this.allFiles.map(af=>af.name).indexOf(f.name);
+					//console.log(`Looking for ${f.name}, found i=${i} [${this.allFiles[i].name} (${this.allFiles[i].modTime})]`);
+					if (i==-1) this.uploadFile(f.name);
+					else {
+						if ( f.modTime > this.allFiles[i].modTime ) this.uploadFile(f.name);
+						this.allFiles.splice(i,1);
+					}
+				});
+				this.allFiles.forEach(f=>{this.deleteFile(f.name);});
+				this.allFiles = str;
+				setTimeout(this.compareFiles.bind(this),this.frequency);
+			}).catch(err=>{console.log(err)});
+	}
+	uploadFile(fileName) {
+		if ( fileName=='' ) return ;
+		var localFileNameFull = this.localRoot + (this.localRoot==''?'':'/') + fileName ;
+		localFileNameFull = localFileNameFull.replace(/\//g,'\\');
+		var dirFileBoundary = fileName.lastIndexOf('/');
+		var localDirRelative = fileName.substr(0,dirFileBoundary);
+		var fileNameOnly = fileName.substr(dirFileBoundary+1);
+		var remoteDirPath = this.remoteRoot + (this.remoteRoot==''?'':'/') + localDirRelative;
+		var remoteFileNameFull = this.remoteRoot + (this.remoteRoot==''?'':'/') + fileName;
+		//console.log(`Upload: ${remoteDirPath}   --  ${fileNameOnly}`);
+		console.log(`Upload: ${localFileNameFull}   -->  ${remoteFileNameFull}`);
+		this.Ftp.put(localFileNameFull,remoteFileNameFull,err=>{
+			if ( err ) {
+				console.log("p: Error code for " + localFileNameFull + " => " + remoteFileNameFull + " is " + err.code);
+				console.log(err);
+				console.log("\n");
+				if ( err.code == 553 ) {
+					// Destination folder may not exist. Create and retry
+					console.log("Will create " + remoteDirPath + " and retry");
+
+					this.Ftp.mkdir(remoteDirPath,true,err2=>{
+						if ( err2 ) throw err2;
+						// Destination folder created on remote. Now upload
+						this.Ftp.put(localFileNameFull,remoteFileNameFull,err3=>{
+							if ( err3 ) throw err3;
+							else console.log(`Uploaded ${fileName}`);
+						});
+					});
+				}
+			} else console.log(`Uploaded ${fileName}`);
+		});
+	}
+	deleteFile(fileName) {
+		var remoteFileNameFull = this.remoteRoot + (this.remoteRoot==''?'':'/') + fileName;
+		console.log(`Will delete ${remoteFileNameFull}`);
+		this.Ftp.delete(remoteFileNameFull, err=>{
+			if ( err ) console.log(`Cannot delete from remote file ${remoteFileNameFull}`);
+		});
+	}
 }
 
-function removeRemoteFile(filename) {
-	console.log("\n\nWill remove from remote ["+filename+"]\n\n");
-}
-
-console.log("\n\nAll files:");console.log(allFiles);
+module.exports = leFtp;

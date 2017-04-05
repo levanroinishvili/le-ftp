@@ -5,38 +5,40 @@ This is not fully tested and should not be used in any critical applications.
 
 ### Usage
 1. Make sure you have `node.js` installed
-2. Edit configuration for `le-ftp` (See [Configuration](#configuration) below)
-3. From command line in the directory where `le-ftp` resides, run `node le-ftp`
-4. To stop watching, use `[Ctrl]+[c]`
-
-### Configuration
-1. Open `le-ftp.js` in a text editor
-2. At the beginning of the script, find the following code:
+2. In the directory where `le-ftp` is installed, create file `testftp.js`
+3. Copy and paste into the new file the following: 
 ```javascript
-var ftpConfig = {
-	host: '',
-	port: 21,
-	remoteRootDir: '',
-	localRootDir: '',
-	user: '',
-	password: '',
-	ext: ['.css','.js','.html','txt'],
-	timeoutSeconds: 3
-};
+LEftp = require('le-ftp');
+
+var x = new LEftp({
+	"host"		: "",		// ftp host address, eg. my.server.com
+	"port"		: 21,
+	"user"		: '',		// Your ftp username
+	"password"	: '',		// Your ftp password
+
+	"localRootDir"	: "C:/user/levan/local_folder_to_watch",
+	"remoteRootDir"	: "remote/destination/folder/to/watch",
+	"frequency"	: 1,		// Number of seconds between each scan
+	"ext"		: ['.css','.js','.html','txt','jpg']
+});
 ```
-3. Edit configuration parameters (see [Configuration Parameters](#configuration-parameters) below)
-3. Save and close `le-ftp.js`
+4. Edit the settings you just pasted (see [Configuration Parameters](#configuration-parameters) below)
+5. From command line in the directory where `le-ftp` resides, run `node le-ftp`
+6. Current files (that match your criteria) will be uploaded and program will keep running
+7. To stop watching, use `[Ctrl]+[c]`
+
 
 
 ### Configuration Parameters
 - `host: 'myftpserver.domain.com'` - address of the ftp server
--	`port: 21`  - ftp server port
+- `port: 21`  - ftp server port
 - `remoteRootDir: ''` - Remote root directory: Local files will be copied to this directory
 - `localRootDir: ''` - Local root directory: Local directory to watch
 - `user: ''` - Ftp username
 - `password: ''` - Ftp password
+- `localRootDir	 : "C:/dir"` - Full path to local folder to be copied to the FTP server. Use Unix backslash "/"
+- `remoteRootDir : 'public_html/dev.clubfinance.uk/angular',` Remote folder, starting from your FTP root
+- `frequency: 1` - number of seconds between each scan. Decimals (e.g. `0.1`) are acceptable
 - `ext: ['css','js','html','txt']` - if you want to only include files with certain extensions,
-  list the extensions here as an array of strings: ['css','js','html'] No need to include '.',
-  so '.css' and 'css' will both work.
-- `timeoutSeconds: 3` - number of seconds between each check. Use decimals (e.g. .1) to check
-  local folder with intervals smaller than 1 second.
+  list the extensions here as an array of strings: `['css','js','html']`. No need to prefix extensions with '.',
+  so `.css` and `css` will both work.
