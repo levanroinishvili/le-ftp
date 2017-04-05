@@ -6,8 +6,8 @@ var x = new LEftp({
 	"user"		: '',
 	"password"	: '',
 
-	"localRootDir"	: "C:\\Users\\Levan.Roinishvili\\Desktop\\landings",
-	"remoteRootDir"	: 'public_html/dev.clubfinance.uk/angular',
+	"localRootDir"	: "C:/my/local/dir",
+	"remoteRootDir"	: 'public_html/remote/dir',
 	"frequency"		: 1,	// Number of seconds between each scan
 	"ext"			: ['.css','.js','.html','txt','jpg']
 });
