@@ -10,6 +10,8 @@ class sFile {
 
 class leFtp {
 	constructor(config) {
+		this.keepWatch = true;
+		this.schedule = null;
 		this.localRoot	= config.localRootDir.replace(/\\/g,'/') ;
 		this.remoteRoot	= config.remoteRootDir;//(config.remoteRootDir.startsWith('/')?'':'/') + config.remoteRootDir ;
 		this.frequency	= 1000*config.frequency;
@@ -51,6 +53,12 @@ class leFtp {
 		this.compareFiles();
 
 
+	}
+
+	stop() {
+		this.keepWatch = false;
+		if ( this.schedule ) clearTimeout(this.schedule);
+		this.Ftp.end();
 	}
 
 	getSnapshot() {
@@ -96,7 +104,7 @@ class leFtp {
 				});
 				this.allFiles.forEach(f=>{this.deleteFile(f.name);});
 				this.allFiles = str;
-				setTimeout(this.compareFiles.bind(this),this.frequency);
+				if (this.keepWatch) this.schedule = setTimeout(this.compareFiles.bind(this),this.frequency);
 			}).catch(err=>{console.log(err)});
 	}
 	uploadFile(fileName) {
