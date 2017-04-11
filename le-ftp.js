@@ -2,9 +2,11 @@ var fs	= require('fs');
 var ftp	= require('ftp');
 
 class sFile {
-	constructor(name,modTime) {
-		this.name = name;
-		this.modTime = modTime;
+	constructor(localRoot, remoteRoot, relativePath, modTime) {
+		this.localRoot	= localRoot;
+		this.remoteRoot	= remoteRoot;
+		this.name		= relativePath;
+		this.modTime	= modTime;
 	}
 }
 
@@ -12,8 +14,16 @@ class leFtp {
 	constructor(config) {
 		this.keepWatch = true;
 		this.schedule = null;
-		this.localRoot	= config.localRootDir.replace(/\\/g,'/') ;
-		this.remoteRoot	= config.remoteRootDir;//(config.remoteRootDir.startsWith('/')?'':'/') + config.remoteRootDir ;
+		//this.localRoot	= config.localRootDir.replace(/\\/g,'/') ;
+		//this.remoteRoot	= config.remoteRootDir;//(config.remoteRootDir.startsWith('/')?'':'/') + config.remoteRootDir ;
+		if ( config.watchList ) this.watchList = config.watchList;
+		else if ( config.localRootDir && config.remoteRootDir ) this.watchList=[{localRootDir:config.localRootDir, remoteRootDir:config.remoteRootDir}];
+		else throw("No folders specified to watch");
+		if (config.localRootDir || config.remoteRootDir) {
+			console.log(
+				"Warning: Configuration parameters localRootDir and remoteRootDir are depricated. Use instead an array:\n" +
+				" [ { localRootDir:'', remoteRootDir:'' } , { localRootDir:'', remoteRootDir:'' } ]");
+		}
 		this.frequency	= 1000*config.frequency;
 
 		this.allFiles = [];
@@ -50,8 +60,16 @@ class leFtp {
 			secure	: false,
 		});
 
-		this.compareFiles();
+		if ( config.onStartUploadAll ) {
+			this.allFiles = [];
+			this.compareFiles(); // Uploads everything as it compares against empty list
+		} else  {
+			this.getSnapshot().then(struct=>{
+				this.allFiles = struct;
+				if (this.keepWatch) this.schedule = setTimeout(this.compareFiles.bind(this),this.frequency);
+			});
 
+		}
 
 	}
 
@@ -62,9 +80,9 @@ class leFtp {
 	}
 
 	getSnapshot() {
-		const walk = (path='' , structure=[]) => {
+		const walk = (localRoot, remoteRoot, path='',structure=[]) => {
 			return new Promise((resolve,reject)=>{
-				let dirFullPath = this.localRoot.concat( (this.localRoot.endsWith('/')||path==''?'':'/'),path);
+				let dirFullPath = localRoot.concat( (localRoot.endsWith('/')||path==''?'':'/'),path);
 				fs.readdir(dirFullPath, (err,files)=>{
 					if (err) console.log(`Error reading directory: ${dirFullPath}`);
 					else {
@@ -74,8 +92,11 @@ class leFtp {
 							const fileRelPath	= `${path}${path==''?'':'/'}${f}` ;
 							fs.stat(filefullpath,(err,fstats)=>{
 								if ( err ) console.log(`${filefullpath} : Error ${err.code}`);
-								else if (fstats.isDirectory() ) walk(fileRelPath,structure).then(ignore=>{if (!--fileToProcess) resolve(structure); });
-								else if (fstats.isFile() ) { if (this.extRegEx.test(f)) structure.push(new sFile(fileRelPath,fstats.mtime.getTime())); if (!--fileToProcess) resolve(structure); }
+								else if (fstats.isDirectory() ) walk(localRoot, remoteRoot, fileRelPath, structure).then(ignore=>{if (!--fileToProcess) resolve(structure); });
+								else if (fstats.isFile() ) {
+									if (this.extRegEx.test(f)) structure.push(new sFile(localRoot, remoteRoot, fileRelPath, fstats.mtime.getTime()));
+									if (!--fileToProcess) resolve(structure);
+								}
 							});
 						});
 					}
@@ -83,61 +104,87 @@ class leFtp {
 			});
 		};
 
-		return new Promise( (resolve,reject)=>{
-			walk()
-				.then(str=>{resolve(str)})
-				.catch(err => { reject(err); });
-		});
+		// return new Promise( (resolve,reject)=>{
+		// 	walk(this.localRoot,this.remoteRoot)
+		// 		.then(str=>{resolve(str)})
+		// 		.catch(err => { reject(err); });
+		// });
+
+		const loadDir = (i,allDirMap=[]) => {
+			return new Promise( (resolve,reject) => {
+				walk(this.watchList[i].localRootDir, this.watchList[i].remoteRootDir,'',[])
+					.then( s=>{
+						allDirMap = allDirMap.concat(s);
+						if (i+1<this.watchList.length) loadDir(i+1,allDirMap).then(adm => {resolve(adm);}).catch(err=>{reject(err);});
+						else resolve(allDirMap);
+					})
+					.catch( err => { reject(err); });
+			});
+
+		};
+
+		return new Promise( (resolve,reject) => {
+			loadDir(0)
+			.then(completeTree=>{
+				resolve(completeTree);
+			})
+			.catch(err=>{reject(err);});
+		})
+
 	}
 
 	compareFiles() {
+		//var d=new Date(); var dh=d.getHours(); var dm=d.getMinutes(); var ds=(dh<10?'0'+dh:dh)+':'+(dm<10?'0'+dm:dm); console.log(`${ds} : Checking`);
+
 		this.getSnapshot()
 			.then((str)=>{
 				str.forEach(f=>{
-					let i = this.allFiles.map(af=>af.name).indexOf(f.name);
-					//console.log(`Looking for ${f.name}, found i=${i} [${this.allFiles[i].name} (${this.allFiles[i].modTime})]`);
-					if (i==-1) this.uploadFile(f.name);
+					let i = this.allFiles.map(af=>af.localRoot+'/'+af.name).indexOf(f.localRoot+'/'+f.name);
+					// console.log(`Looking for ${f.name}, found i=${i} [${this.allFiles[i].name} (${this.allFiles[i].modTime})]`);
+					if (i==-1) this.uploadFile(f);
 					else {
-						if ( f.modTime > this.allFiles[i].modTime ) this.uploadFile(f.name);
+						if ( f.modTime > this.allFiles[i].modTime ) this.uploadFile(f);
 						this.allFiles.splice(i,1);
 					}
 				});
-				this.allFiles.forEach(f=>{this.deleteFile(f.name);});
+				this.allFiles.forEach(f=>{this.deleteFile(f);});
 				this.allFiles = str;
 				if (this.keepWatch) this.schedule = setTimeout(this.compareFiles.bind(this),this.frequency);
 			}).catch(err=>{console.log(err)});
 	}
-	uploadFile(fileName) {
-		if ( fileName=='' ) return ;
-		var localFileNameFull = this.localRoot + (this.localRoot==''?'':'/') + fileName ;
+
+	uploadFile(file) {
+		if ( !file || !file.name ) return ;
+		var localFileNameFull = file.localRoot + (file.localRoot==''?'':'/') + file.name ;
 		localFileNameFull = localFileNameFull.replace(/\//g,'\\');
-		var dirFileBoundary = fileName.lastIndexOf('/');
-		var localDirRelative = fileName.substr(0,dirFileBoundary);
-		var fileNameOnly = fileName.substr(dirFileBoundary+1);
-		var remoteDirPath = this.remoteRoot + (this.remoteRoot==''?'':'/') + localDirRelative;
-		var remoteFileNameFull = this.remoteRoot + (this.remoteRoot==''?'':'/') + fileName;
+		var dirFileBoundary = file.name.lastIndexOf('/');
+		var localDirRelative = file.name.substr(0,dirFileBoundary);
+		var fileNameOnly = file.name.substr(dirFileBoundary+1);
+		var remoteDirPath = file.remoteRoot + (file.remoteRoot==''?'':'/') + localDirRelative;
+		var remoteFileNameFull = file.remoteRoot + (file.remoteRoot==''?'':'/') + file.name;
 		//console.log(`Upload: ${remoteDirPath}   --  ${fileNameOnly}`);
 		//console.log(`Upload: ${localFileNameFull}   -->  ${remoteFileNameFull}`);
+
 		this.Ftp.put(localFileNameFull,remoteFileNameFull,err=>{
 			if ( err ) {
 				if ( err.code == 553 ) {
 					// Destination folder may not exist. Create and retry
-					console.log("Will create directory " + remoteDirPath);
+					console.log("Will create remote directory " + remoteDirPath);
 
 					this.Ftp.mkdir(remoteDirPath,true,err2=>{
 						if ( err2 ) throw err2;
 						// Destination folder created on remote. Now upload
 						this.Ftp.put(localFileNameFull,remoteFileNameFull,err3=>{
 							if ( err3 ) throw err3;
-							else console.log(`Uploaded ${fileName}`);
+							else console.log(`Uploaded ${file.name}`);
 						});
 					});
 				} else throw err; // Some error, other than "destination directory does not exist"
-			} else console.log(`Uploaded ${fileName}`);
+			} else console.log(`Uploaded ${file.name}`);
 		});
 	}
-	deleteFile(fileName) {
-		var remoteFileNameFull = this.remoteRoot + (this.remoteRoot==''?'':'/') + fileName;
+	deleteFile(file) {
+		var remoteFileNameFull = file.remoteRoot + (file.remoteRoot==''?'':'/') + file.name;
 		//console.log(`Will delete ${remoteFileNameFull}`);
 		this.Ftp.delete(remoteFileNameFull, err=>{
 			if ( err ) console.log(`Cannot delete from remote file ${remoteFileNameFull}`);

@@ -1,6 +1,6 @@
 {
   "name": "le-ftp",
-  "version": "1.0.4",
+  "version": "1.0.5",
   "description": "Watch local directory and upload changes to ftp",
   "main": "le-ftp.js",
   "scripts": {
