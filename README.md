@@ -15,9 +15,21 @@ var x = new LEftp({
 	"port"		: 21,
 	"user"		: '',		// Your ftp username
 	"password"	: '',		// Your ftp password
+	
+	"watchList":	[
+				{
+					"localRootDir"	: "C:/local/folder1",
+					"remoteRootDir"	: 'public_html/remote/dir1'
+				},
+				{
+					"localRootDir"	: "C:/my/local/folder2",
+					"remoteRootDir"	: 'public_html/remote/dir2'
+				}
+			],
+	// The following two parameters are depricated. Use watchList array instead
+	// "localRootDir" : "C:/my/local/folder",	// Depricated, use watchList array instead
+	// "remoteRootDir": 'public_html/remote/dir',	// Depricated, use watchList array instead
 
-	"localRootDir"	: "C:/user/levan/local_folder_to_watch",
-	"remoteRootDir"	: "remote/destination/folder/to/watch",
 	"frequency"	: 1,		// Number of seconds between each scan
 	"ext"		: ['.css','.js','.html','txt','jpg'],
     "onStartUploadAll"  : true  // On start, upload all files (that match the "watch criteria").
@@ -45,8 +57,20 @@ setTimeout(
 - `localRootDir: ''` - Local root directory: Local directory to watch
 - `user: ''` - Ftp username
 - `password: ''` - Ftp password
-- `localRootDir	 : "C:/dir"` - Full path to local folder to be copied to the FTP server. Use Unix backslash "/"
-- `remoteRootDir : 'public_html/dev.clubfinance.uk/angular',` Remote folder, starting from your FTP root
+
+- `watchList: [` - Array of folders to watch and corresponding upload target directories
+  - `{` - Beging first object describing the pair of folder to watch and its upload target directory
+  - `localRootDir: 'C:/my/local/folder1',` - first local folder to watch
+  - `remoteRootDir: 'public_html/remote/dir1'` - first remote upload target directory
+  - `},` - End first object
+  - `{` - Beging second object describing the pair of folder to watch and its upload target directory
+  - `localRootDir: 'C:/my/local/folder2',` - second local folder to watch
+  - `remoteRootDir: 'public_html/remote/dir2'` - second remote upload target directory
+  - `},` - End Second object
+- `],` - End of array of folders to watch
+
+- `localRootDir	 : "C:/dir"` - **Depricated**. Full path to local folder to be copied to the FTP server. Use Unix backslash "/"
+- `remoteRootDir : 'public_html/dev.clubfinance.uk/angular',` - **Depricated** Remote folder, starting from your FTP root
 - `frequency: 1` - number of seconds between each scan. Decimals (e.g. `0.1`) are acceptable
 - `ext: ['css','js','html','txt']` - if you want to only include files with certain extensions,
   list the extensions here as an array of strings: `['css','js','html']`. No need to prefix extensions with '.',
